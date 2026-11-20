@@ -1,15 +1,7 @@
 ﻿using Newtonsoft.Json.Linq;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.IO;
 using System.Windows.Forms;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 using ProgressBar = System.Windows.Forms.ProgressBar;
 
 namespace CryptoTrainer
@@ -17,9 +9,41 @@ namespace CryptoTrainer
     public partial class SlotsMenu : Form
     {
         const int ileSlotow = 3;
+        private readonly ComboBox wyborPoziomu;
+
         public SlotsMenu()
         {
             InitializeComponent();
+
+            Label opisPoziomu = new Label
+            {
+                Text = "Wybierz poziom, a następnie slot:",
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.Transparent,
+                Location = new Point(256, 70),
+                AutoSize = true
+            };
+            wyborPoziomu = new ComboBox
+            {
+                Name = "wyborPoziomu",
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                BackColor = SystemColors.ActiveCaption,
+                ForeColor = Color.Black,
+                Location = new Point(256, 105),
+                Size = new Size(361, 30),
+                TabIndex = 0
+            };
+            wyborPoziomu.Items.Add("POZIOM 1 – Szyfr Cezara");
+            wyborPoziomu.Items.Add("POZIOM 2 – Szyfr Atbasz");
+            wyborPoziomu.SelectedIndex = 0;
+            Controls.Add(opisPoziomu);
+            Controls.Add(wyborPoziomu);
+            Slot1Btn.TabIndex = 1;
+            Slot2Btn.TabIndex = 2;
+            Slot3Btn.TabIndex = 3;
+
             aktualizujProgressBary();
 
         }
@@ -50,32 +74,36 @@ namespace CryptoTrainer
                 $"Slot{barNr}.json"
             );
 
-            if (!File.Exists(sciezka))
+            JObject dane;
+            try
             {
-                MessageBox.Show($"Nie znaleziono pliku:\n{sciezka}");
+                dane = File.Exists(sciezka)
+                    ? JObject.Parse(File.ReadAllText(sciezka))
+                    : new JObject();
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                       ex is Newtonsoft.Json.JsonException)
+            {
+                MessageBox.Show(this, $"Nie udało się odczytać postępów slotu {barNr}.\n\n{ex.Message}",
+                    "Błąd odczytu", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-            string json = File.ReadAllText(sciezka);
-            JObject dane = JObject.Parse(json);
-
             int poprawne = 0;
-            int wszystkie = 0;
+            const int wszystkie = 15;
 
-            foreach (var zadanie in dane.Properties())
+            for (int poziom = 1; poziom <= 5; poziom++)
             {
-                JArray wartosci = (JArray)zadanie.Value;
-                string wynik = wartosci[0]?.ToString();
-
-                wszystkie++;
-
-                if (wynik == "correct")
+                for (int zadanie = 1; zadanie <= 3; zadanie++)
                 {
-                    poprawne++;
+                    // Niepełna tablica nie może wywołać błędu indeksowania.
+                    if (dane[$"{poziom}.{zadanie}"] is JArray { Count: > 0 } wartosci &&
+                        wartosci[0]?.ToString() == "correct")
+                        poprawne++;
                 }
             }
 
-            ProgressBar progressBar = barNr switch
+            ProgressBar? progressBar = barNr switch
             {
                 1 => progressBar1,
                 2 => progressBar2,
@@ -83,7 +111,7 @@ namespace CryptoTrainer
                 _ => null
             };
 
-            Label label = barNr switch
+            Label? label = barNr switch
             {
                 1 => label1,
                 2 => label2,
@@ -91,7 +119,7 @@ namespace CryptoTrainer
                 _ => null
             };
 
-            if (progressBar == null || label == null || wszystkie == 0)
+            if (progressBar == null || label == null)
                 return;
 
             progressBar.Minimum = 0;
@@ -116,13 +144,27 @@ namespace CryptoTrainer
         }
         private void ZacznijGre(int slot)
         {
-            this.Hide();
+            Form gra;
+            try
+            {
+                if (wyborPoziomu.SelectedIndex == 1)
+                    gra = new Atbasz(slot, this);
+                else
+                    gra = new Cezar(slot, this);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                       ex is Newtonsoft.Json.JsonException)
+            {
+                MessageBox.Show(this,
+                    $"Nie udało się otworzyć slotu {slot}. Plik nie został zmieniony.\n\n{ex.Message}",
+                    "Błąd odczytu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
-            Cezar gra = new Cezar(slot, this);
+            this.Hide();
 
             gra.FormClosed += (s, e) =>
             {
-                this.Show();
                 aktualizujProgressBary();
             };
 

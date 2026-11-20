@@ -62,6 +62,7 @@
             Slot2Btn.TabIndex = 1;
             Slot2Btn.Text = "Slot 2";
             Slot2Btn.UseVisualStyleBackColor = false;
+            Slot2Btn.Click += Slot2Btn_Click;
             // 
             // Slot3Btn
             // 
@@ -72,6 +73,7 @@
             Slot3Btn.TabIndex = 2;
             Slot3Btn.Text = "Slot 3";
             Slot3Btn.UseVisualStyleBackColor = false;
+            Slot3Btn.Click += Slot3Btn_Click;
             // 
             // progressBar1
             // 

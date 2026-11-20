@@ -12,16 +12,13 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="Jsons\Slot3.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Jsons\Slot2.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Jsons\Slot1.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+  <!-- Istniejące pliki w katalogu aplikacji zawierają postępy użytkownika. -->
+  <Target Name="CopyMissingSlots" AfterTargets="Build">
+    <ItemGroup>
+      <SlotSeed Include="$(MSBuildProjectDirectory)\Jsons\Slot*.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(SlotSeed)" DestinationFolder="$(OutDir)Jsons"
+          Condition="!Exists('$(OutDir)Jsons\%(SlotSeed.Filename)%(SlotSeed.Extension)')" />
+  </Target>
 
 </Project>

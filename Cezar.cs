@@ -17,28 +17,32 @@ namespace CryptoTrainer
         private JObject _dane = new JObject();
         private bool _wczytywanie;
 
-        private Panel _introPanel;
-        private Panel _zadaniaPanel;
+        private Panel _introPanel = null!;
+        private Panel _zadaniaPanel = null!;
+        private bool _niezapisaneZmiany;
 
-        private TextBox[] _odpowiedzi = new TextBox[3];
-        private Label[] _wyniki = new Label[3];
+        private readonly TextBox[] _odpowiedzi = new TextBox[3];
+        private readonly Label[] _wyniki = new Label[3];
 
         private readonly string[] _pytania =
         {
             "Łatwe: odszyfruj NRW. Przesunięcie wynosi 3.",
-            "Średnie: odszyfruj GRP. Przesunięcie wynosi 3.",
-            "Trudne: odszyfruj SODQHWD. Przesunięcie wynosi 3."
+            "Średnie: zaszyfruj TAJNY KOD. Przesunięcie wynosi 3.",
+            "Trudne: odszyfruj VSRWNDMPB VLH MXWUR SR VCNROH. Przesunięcie: 3."
         };
 
         private readonly string[] _poprawneOdpowiedzi =
         {
             "KOT",
-            "DOM",
-            "PLANETA"
+            "WDMQB NRG",
+            "SPOTKAJMY SIE JUTRO PO SZKOLE"
         };
 
         public Cezar(int slotNr, Form menuForm)
         {
+            if (slotNr < 1 || slotNr > 3)
+                throw new ArgumentOutOfRangeException(nameof(slotNr));
+
             InitializeComponent();
 
             _slotNr = slotNr;
@@ -55,6 +59,11 @@ namespace CryptoTrainer
             WczytajDane();
             ZbudujInterfejs();
 
+            FormClosing += (s, e) =>
+            {
+                if (_niezapisaneZmiany && !ZapiszDane())
+                    e.Cancel = true;
+            };
             FormClosed += (s, e) => _menuForm.Show();
         }
 
@@ -85,26 +94,56 @@ namespace CryptoTrainer
                 {
                     string klucz = $"{poziom}.{zadanie}";
 
-                    if (_dane[klucz] is not JArray tablica)
+                    if (_dane[klucz] == null)
                     {
                         _dane[klucz] = new JArray("", "");
                     }
-                    else
+                    else if (_dane[klucz] is JArray tablica)
                     {
                         while (tablica.Count < 2)
                             tablica.Add("");
                     }
+                    else
+                    {
+                        throw new Newtonsoft.Json.JsonException(
+                            $"Nieprawidłowe dane zadania {klucz}. Oczekiwano tablicy [wynik, odpowiedź].");
+                    }
                 }
             }
-
-            ZapiszDane();
         }
 
-        private void ZapiszDane()
+        private bool ZapiszDane()
         {
-            File.WriteAllText(
-                _sciezka,
-                _dane.ToString(Newtonsoft.Json.Formatting.Indented));
+            _niezapisaneZmiany = true;
+            string plikTymczasowy = _sciezka + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                // Najpierw zapisujemy cały dokument obok pliku docelowego.
+                // Błąd zapisu nie może wyzerować dotychczasowych postępów.
+                File.WriteAllText(plikTymczasowy,
+                    _dane.ToString(Newtonsoft.Json.Formatting.Indented));
+                if (File.Exists(_sciezka))
+                    File.Replace(plikTymczasowy, _sciezka, null);
+                else
+                    File.Move(plikTymczasowy, _sciezka);
+
+                _niezapisaneZmiany = false;
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                MessageBox.Show(this,
+                    $"Nie udało się zapisać odpowiedzi w slocie {_slotNr}.\n" +
+                    "Odpowiedzi pozostają w formularzu. Spróbuj ponownie.\n\n" + ex.Message,
+                    "Błąd zapisu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+            finally
+            {
+                try { File.Delete(plikTymczasowy); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
 
         private void ZbudujInterfejs()
@@ -131,19 +170,20 @@ namespace CryptoTrainer
             Label instrukcja = new Label
             {
                 Text =
-                    "Szyfr Cezara to jeden z najprostszych szyfrów " +
-                    "podstawieniowych.\n\n" +
+                    "Szyfr Cezara to szyfr podstawieniowy. " +
+                    "Używamy alfabetu A–Z, bez polskich znaków.\n\n" +
                     "Zasada działania:\n" +
                     "Każdą literę zastępujemy literą przesuniętą " +
                     "o określoną liczbę miejsc w alfabecie.\n\n" +
                     "Przykład dla przesunięcia o 3:\n" +
-                    "A → D, B → E, C → F\n\n" +
+                    "A → D, B → E, C → F, X → A, Y → B, Z → C\n\n" +
                     "Aby odszyfrować wiadomość, przesuwamy litery " +
                     "w przeciwnym kierunku.\n\n" +
                     "Przykład: NRW → KOT\n\n" +
                     "W tym poziomie wszystkie zadania wykorzystują " +
                     "przesunięcie o 3 miejsca.\n" +
-                    "Wpisuj odpowiedzi bez spacji.",
+                    "Wielkość liter i spacje nie wpływają na ocenę.\n" +
+                    "Odpowiedzi zapisują się automatycznie. Ocenia je Sprawdź.",
                 Font = new Font("Segoe UI", 14, FontStyle.Bold),
                 ForeColor = Color.White,
                 BackColor = Color.Transparent,
@@ -230,7 +270,7 @@ namespace CryptoTrainer
                     ForeColor = Color.White,
                     BackColor = Color.Transparent,
                     Location = new Point(15, 25),
-                    Size = new Size(740, 30)
+                    Size = new Size(740, 40)
                 };
 
                 _odpowiedzi[i] = new TextBox
@@ -320,35 +360,25 @@ namespace CryptoTrainer
         {
             string klucz = $"1.{numerZadania}";
 
-            return (JArray)_dane[klucz];
+            return (JArray)_dane[klucz]!;
         }
 
         private void WczytajOdpowiedziDoPol()
         {
             _wczytywanie = true;
-
-            for (int i = 0; i < 3; i++)
+            try
             {
-                JArray zadanie = PobierzZadanie(i + 1);
-
-                _odpowiedzi[i].Text =
-                    zadanie[1]?.ToString() ?? "";
-
-                string status = zadanie[0]?.ToString();
-
-                if (status == "correct")
+                for (int i = 0; i < _odpowiedzi.Length; i++)
                 {
-                    _wyniki[i].Text = "Poprawna odpowiedź";
-                    _wyniki[i].ForeColor = Color.Lime;
-                }
-                else if (status == "incorrect")
-                {
-                    _wyniki[i].Text = "Niepoprawna odpowiedź";
-                    _wyniki[i].ForeColor = Color.OrangeRed;
+                    JArray zadanie = PobierzZadanie(i + 1);
+                    _odpowiedzi[i].Text = zadanie[1]?.ToString() ?? "";
+                    UstawWynik(i, zadanie[0]?.ToString() ?? "");
                 }
             }
-
-            _wczytywanie = false;
+            finally
+            {
+                _wczytywanie = false;
+            }
         }
 
         private void ZapiszOdpowiedz(int indeksPola)
@@ -362,7 +392,7 @@ namespace CryptoTrainer
 
         private void SprawdzOdpowiedzi()
         {
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < _odpowiedzi.Length; i++)
             {
                 string odpowiedz = Normalizuj(
                     _odpowiedzi[i].Text);
@@ -381,22 +411,34 @@ namespace CryptoTrainer
 
                 zadanie[1] = _odpowiedzi[i].Text;
 
-                _wyniki[i].Text = czyPoprawna
-                    ? "Poprawna odpowiedź!"
-                    : "Niepoprawna odpowiedź.";
-
-                _wyniki[i].ForeColor = czyPoprawna
-                    ? Color.Lime
-                    : Color.OrangeRed;
+                UstawWynik(i, zadanie[0]!.ToString());
             }
 
-            ZapiszDane();
+            if (!ZapiszDane())
+                return;
 
             MessageBox.Show(
+                this,
                 "Wyniki zostały sprawdzone i zapisane.",
                 "CryptoTrainer",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
+        }
+
+        private void UstawWynik(int indeks, string status)
+        {
+            _wyniki[indeks].Text = status switch
+            {
+                "correct" => "Poprawna odpowiedź!",
+                "incorrect" => "Niepoprawna odpowiedź.",
+                _ => ""
+            };
+            _wyniki[indeks].ForeColor = status switch
+            {
+                "correct" => Color.Lime,
+                "incorrect" => Color.OrangeRed,
+                _ => Color.White
+            };
         }
 
         private string Normalizuj(string tekst)
