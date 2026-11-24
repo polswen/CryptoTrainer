@@ -37,6 +37,7 @@ namespace CryptoTrainer
             };
             wyborPoziomu.Items.Add("POZIOM 1 – Szyfr Cezara");
             wyborPoziomu.Items.Add("POZIOM 2 – Szyfr Atbasz");
+            wyborPoziomu.Items.Add("POZIOM 3 – Szyfr Vigenère’a");
             wyborPoziomu.SelectedIndex = 0;
             Controls.Add(opisPoziomu);
             Controls.Add(wyborPoziomu);
@@ -147,10 +148,12 @@ namespace CryptoTrainer
             Form gra;
             try
             {
-                if (wyborPoziomu.SelectedIndex == 1)
-                    gra = new Atbasz(slot, this);
-                else
-                    gra = new Cezar(slot, this);
+                gra = wyborPoziomu.SelectedIndex switch
+                {
+                    1 => new Atbasz(slot, this),
+                    2 => new Vigenere(slot, this),
+                    _ => new Cezar(slot, this)
+                };
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
                                        ex is Newtonsoft.Json.JsonException)
